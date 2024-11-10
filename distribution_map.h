@@ -14,6 +14,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
+#include <opencv4/opencv2/core/hal/interface.h>
 #include <vector>
 #include <iostream>
 #include <chrono>
@@ -198,7 +199,7 @@ struct distribution_map
         double time_delay = static_cast<double>(time_delay_idx) * step_time;
         for (size_t i = 0; i < urgency_trajpt->rows; i++){
             for (size_t j = 0; j < urgency_trajpt->cols; j++){
-                std::array<double, 2> dist_bgn{static_cast<double>(i - urgency_radius_dscrt) * grid_size, static_cast<double>(j - urgency_radius_dscrt) * grid_size};
+                std::array<double, 2> dist_bgn{(static_cast<double>(urgency_radius_dscrt) - static_cast<double>(i)) * grid_size, (static_cast<double>(urgency_radius_dscrt) - static_cast<double>(j)) * grid_size};
                 std::array<double, 2> dist_end{dist_bgn[0] + traj_waypt[time_delay_idx + waypt_interval][0] - traj_waypt[time_delay_idx][0], dist_bgn[1] + traj_waypt[time_delay_idx + waypt_interval][1] - traj_waypt[time_delay_idx][1]};
                 double dist_sqr = dist_bgn[0] * dist_bgn[0] + dist_bgn[1] * dist_bgn[1];
                 double urgency = 1.0 / (2.0 * M_PI * stdev_vel * stdev_vel) * std::exp(-dist_sqr / (2.0 * (stdev_vel * time_delay) * (stdev_vel * time_delay)));
@@ -297,7 +298,7 @@ struct distribution_map
 
         for (size_t i = static_cast<size_t>(waypt_start_idx); i + waypt_interval < waypt_num; i += static_cast<size_t>(waypt_interval)) {
             std::array<int, 2> waypt_idx{static_cast<int>((traj_waypt[i][0] - robot_last_position[0]) / grid_size) + map_size_hf_dscrt, static_cast<int>((traj_waypt[i][1] - robot_last_position[1]) / grid_size) + map_size_hf_dscrt};
-            double urgency_radius = 3 * stdev_vel * waypt_start_idx * step_time;
+            double urgency_radius = 3 * stdev_vel * i * step_time;
             int urgency_radius_dscrt = static_cast<int>(urgency_radius / grid_size);
 
             cv::Mat urgency_trajpt = cv::Mat::zeros(2*urgency_radius_dscrt+1, 2*urgency_radius_dscrt+1, CV_64F);
@@ -308,8 +309,8 @@ struct distribution_map
             int board_lim_down = std::min(waypt_idx[1], urgency_radius_dscrt);
             int board_lim_up = std::min(map_size_dscrt - waypt_idx[1], urgency_radius_dscrt+1);
             
-            cv::Mat sub_urgency_trajpt = urgency_trajpt(cv::Rect(urgency_radius_dscrt - board_lim_left, urgency_radius_dscrt - board_lim_down, board_lim_right - board_lim_left, board_lim_up - board_lim_down));
-            urgency_map_potential(cv::Rect(waypt_idx[0] - board_lim_left, waypt_idx[1] - board_lim_down, board_lim_right - board_lim_left, board_lim_up - board_lim_down)) += sub_urgency_trajpt;
+            cv::Mat sub_urgency_trajpt = urgency_trajpt(cv::Rect(urgency_radius_dscrt - board_lim_left, urgency_radius_dscrt - board_lim_down, board_lim_right + board_lim_left, board_lim_up + board_lim_down));
+            urgency_map_potential(cv::Rect(waypt_idx[0] - board_lim_left, waypt_idx[1] - board_lim_down, board_lim_right + board_lim_left, board_lim_up + board_lim_down)) += sub_urgency_trajpt;
         }
 
         urgency_map_potential = urgency_map_potential.mul(map_potential);
@@ -360,12 +361,16 @@ struct distribution_map
     void draw_map()
     {
         cv::Mat map_potential_img = cv::Mat::zeros(map_size_dscrt, map_size_dscrt, CV_8UC1);
+        cv::Mat urgency_map_potential_img = cv::Mat::zeros(map_size_dscrt, map_size_dscrt, CV_64F);
         for (size_t i = 0; i < map_size_dscrt; i++){
             for (size_t j = 0; j < map_size_dscrt; j++){
                 map_potential_img.at<uchar>(i, j) = static_cast<uchar>(map_potential.at<double>(i, j) * 255);
             }
         }
+        cv::normalize(urgency_map_potential, urgency_map_potential_img, 0, 255, cv::NORM_MINMAX);
+        urgency_map_potential_img.convertTo(urgency_map_potential_img, CV_8UC1);
         cv::imshow("map_potential", map_potential_img);
+        cv::imshow("urgency_map_potential", urgency_map_potential_img);
         cv::waitKey(0);
     }
     //*/
