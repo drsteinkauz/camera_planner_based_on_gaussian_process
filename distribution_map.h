@@ -23,6 +23,7 @@ struct distribution_map
 {
     /*/
         Coordination: World Frame
+        Units: meter, radian, second
     //*/
     
     static constexpr double step_time = 0.1;
@@ -41,10 +42,15 @@ struct distribution_map
 
     static constexpr double fov_angle = M_PI / 180.0 * 72.0;
     static constexpr double fov_depth = 5.0;
+    static constexpr double fov_depth_min = 0.5;
 
     static constexpr int waypt_num = 30;
-    static constexpr int waypt_start_idx = 6;
-    static constexpr int waypt_interval = 6;
+    static constexpr int waypt_start_idx = 5;
+    static constexpr int waypt_interval = 5;
+
+    static constexpr double dyn_obj_vanish_dist = 15.0;
+
+    static constexpr double hybrid_urgency_grad = 1.0 / ((2.0*M_PI - fov_angle)/2.0);
 
 
 
@@ -67,6 +73,8 @@ struct distribution_map
 
     std::vector<std::vector<double>> obs_obj_cost{};
 
+    std::vector<cv::Mat> pre_calculated_urgency_trajpt{};
+
 
 
     std::array<double, 3> robot_last_position{};
@@ -79,7 +87,7 @@ struct distribution_map
     std::vector<dyn_obj> crt_obs_dyn_obj{};
     cv::Mat crt_obs_stat_obj = cv::Mat::zeros(map_size_dscrt, map_size_dscrt, CV_8UC1);
     
-    std::array<std::array<double, 3>, waypt_num> traj_waypt{};
+    std::array<std::array<double, 3>, waypt_num> traj_waypt{}; // traj_waypt[0] is the next way point (expected robot new position)
 
 
 
@@ -100,6 +108,17 @@ struct distribution_map
             }
         }
         cvlt_kern /= sum_kern; // normalization
+
+        // calculate urgency map for single trajectory points
+        for (size_t i = static_cast<size_t>(waypt_start_idx); i + waypt_interval < waypt_num; i += static_cast<size_t>(waypt_interval)) {
+            double urgency_radius = 3 * stdev_vel * i * step_time;
+            int urgency_radius_dscrt = static_cast<int>(urgency_radius / grid_size);
+
+            cv::Mat urgency_trajpt = cv::Mat::zeros(2*urgency_radius_dscrt+1, 2*urgency_radius_dscrt+1, CV_64F);
+            generate_urgency_trajpt_matrix(&urgency_trajpt, urgency_radius_dscrt, i);
+
+            pre_calculated_urgency_trajpt.push_back(urgency_trajpt);
+        }
     }
 
 
@@ -284,6 +303,9 @@ struct distribution_map
             if (is_covered_sector(sector_center, camera_last_orientation, fov_angle, fov_depth, pt)) {
                 known_obj.erase(itr);
                 itr--;
+            } else if ((pt[0] - robot_last_position[0]) * (pt[0] - robot_last_position[0]) + (pt[1] - robot_last_position[1]) * (pt[1] - robot_last_position[1]) > dyn_obj_vanish_dist * dyn_obj_vanish_dist) {
+                known_obj.erase(itr);
+                itr--;
             }
         }
 
@@ -301,8 +323,7 @@ struct distribution_map
             double urgency_radius = 3 * stdev_vel * i * step_time;
             int urgency_radius_dscrt = static_cast<int>(urgency_radius / grid_size);
 
-            cv::Mat urgency_trajpt = cv::Mat::zeros(2*urgency_radius_dscrt+1, 2*urgency_radius_dscrt+1, CV_64F);
-            generate_urgency_trajpt_matrix(&urgency_trajpt, urgency_radius_dscrt, i);
+            cv::Mat urgency_trajpt = pre_calculated_urgency_trajpt[(i - waypt_start_idx) / waypt_interval];
 
             int board_lim_left = std::min(waypt_idx[0], urgency_radius_dscrt);
             int board_lim_right = std::min(map_size_dscrt - waypt_idx[0], urgency_radius_dscrt+1);
@@ -316,13 +337,63 @@ struct distribution_map
         urgency_map_potential = urgency_map_potential.mul(map_potential);
     }
 
+    void update_urgency_map_known_obj()
+    {
+        for (auto itr = known_obj.begin(); itr != known_obj.end(); itr++) {
+            
+        }
+    }
+
+    double get_hybrid_urgency(double camera_new_orientation, std::array<double, 3> const& robot_last_position, std::array<double, 3> const& robot_new_position, double fov_angle, double fov_depth, double fov_depth_min)
+    {
+        std::array<int, 2> del_pos_dscrt_xy{static_cast<int>((robot_new_position[0] - robot_last_position[0]) / grid_size), static_cast<int>((robot_new_position[1] - robot_last_position[1]) / grid_size)};
+        cv::Point center(map_size_hf_dscrt + del_pos_dscrt_xy[0], map_size_hf_dscrt + del_pos_dscrt_xy[1]);
+        int fov_depth_dscrt = static_cast<int>(fov_depth / grid_size);
+        int fov_depth_min_dscrt = static_cast<int>(fov_depth_min / grid_size);
+        double start_angle = 0.0;
+        double end_angle = (2*M_PI - fov_angle) * 180.0/M_PI;
+        double bias_angle = M_PI/2.0 - (camera_new_orientation - M_PI) - (2*M_PI - fov_angle)/2.0;
+        bias_angle = theta_property(bias_angle);
+        if (bias_angle < 0.0)
+            bias_angle += 2 * M_PI;
+        bias_angle *= 180.0/M_PI;
+
+        cv::Mat mask = cv::Mat::zeros(map_size_dscrt, map_size_dscrt, CV_64F);
+        cv::ellipse(mask, center, cv::Size(fov_depth_dscrt, fov_depth_dscrt), bias_angle, start_angle, end_angle, cv::Scalar(1), -1);
+        for (size_t i = 0; i < mask.rows; i++) {
+            for (size_t j = 0; j < mask.cols; j++) {
+                if (mask.at<double>(i, j) > 0) {
+                    double pt_angle = std::atan2(static_cast<double>(j - map_size_hf_dscrt - del_pos_dscrt_xy[1]), static_cast<double>(i - map_size_hf_dscrt - del_pos_dscrt_xy[0]));
+                    double pt_rel_angle = theta_property(pt_angle - camera_new_orientation);
+                    mask.at<double>(i, j) = hybrid_urgency_grad * (M_PI - std::abs(pt_rel_angle));
+                }
+            }
+        }
+
+        start_angle = 0.0;
+        end_angle = fov_angle * 180.0/M_PI;
+        bias_angle = M_PI/2.0 - camera_new_orientation - fov_angle/2.0;
+        bias_angle = theta_property(bias_angle);
+        if (bias_angle < 0.0)
+            bias_angle += 2 * M_PI;
+        bias_angle *= 180.0/M_PI;
+        cv::ellipse(mask, center, cv::Size(fov_depth_dscrt, fov_depth_dscrt), bias_angle, start_angle, end_angle, cv::Scalar(1), -1);
+
+        cv::circle(mask, center, fov_depth_min_dscrt, cv::Scalar(0), -1);
+
+        cv::Mat masked_urgency_map_potential = urgency_map_potential.mul(mask);
+        double urgency_potential = cv::sum(masked_urgency_map_potential)[0];
+
+        return urgency_potential;
+    }
+
 
 
     void update_map()
     {
         std::array<double, 3> robot_last_position_alt = robot_last_position;
         robot_last_position = robot_crt_position;
-        std::array<double, 3> robot_del_position {robot_last_position[0] - robot_last_position_alt[0], robot_last_position[1] - robot_last_position_alt[1], robot_last_position[2] - robot_last_position_alt[2]};
+        std::array<double, 3> robot_del_position{robot_last_position[0] - robot_last_position_alt[0], robot_last_position[1] - robot_last_position_alt[1], robot_last_position[2] - robot_last_position_alt[2]};
         
         camera_last_orientation = camera_crt_orientation;
         last_obs_dyn_obj = crt_obs_dyn_obj;
@@ -346,6 +417,8 @@ struct distribution_map
         std::chrono::high_resolution_clock::time_point t_6 = std::chrono::high_resolution_clock::now();
         update_urgency_map_potential();
         std::chrono::high_resolution_clock::time_point t_7 = std::chrono::high_resolution_clock::now();
+        get_hybrid_urgency(camera_last_orientation, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
+        std::chrono::high_resolution_clock::time_point t_8 = std::chrono::high_resolution_clock::now();
        
         std::cout << "move_map_potential: " << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
         std::cout << "scan_map_potential: " << (t_2 - t_1).count()/1e6 << "ms" << std::endl;
@@ -353,6 +426,7 @@ struct distribution_map
         std::cout << "hstr_update_known_obj: " << (t_4 - t_3).count()/1e6 << "ms" << std::endl;
         std::cout << "obs_update_known_obj: " << (t_5 - t_4).count()/1e6 << "ms" << std::endl;
         std::cout << "update_urgency_map_potential: " << (t_7 - t_6).count()/1e6 << "ms" << std::endl;
+        std::cout << "get_hybrid_urgency: " << (t_8 - t_7).count()/1e6 << "ms" << std::endl;
     }
 
 

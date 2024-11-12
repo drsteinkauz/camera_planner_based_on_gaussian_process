@@ -6,7 +6,7 @@ The distribution map is the basis of camera planning. It describe the distributi
 OpenCV is necessary for this project.
 
 To run the project, you need to:  
-mkdir build  
-cd build  
-cmake ..  
-make
+    mkdir build  
+    cd build  
+    cmake ..  
+    make

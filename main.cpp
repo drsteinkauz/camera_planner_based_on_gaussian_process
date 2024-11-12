@@ -12,11 +12,6 @@ int main() {
         map.update_map();
         std::chrono::high_resolution_clock::time_point t_1 = std::chrono::high_resolution_clock::now();
         std::cout << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
-
-        // cv::imshow("map_potential", map.map_potential);
-        // cv::imshow("urgency_map_potential", map.urgency_map_potential);
-
-        // cv::waitKey(0);
         
         map.draw_map();
     }
