@@ -50,7 +50,7 @@ struct distribution_map
 
     static constexpr double dyn_obj_vanish_dist = 15.0;
 
-    static constexpr double hybrid_urgency_grad = 1.0 / ((2.0*M_PI - fov_angle)/2.0);
+    static constexpr double hybrid_urgency_grad = 1.0 / (M_PI - fov_angle/2.0);
 
 
 
@@ -66,13 +66,12 @@ struct distribution_map
 
 
     cv::Mat urgency_map_potential = cv::Mat::zeros(map_size_dscrt, map_size_dscrt, CV_64F);
+    std::vector<double> urgency_known_obj{};
 
     
     
     cv::Mat cvlt_kern = cv::Mat::zeros(kern_size_dscrt, kern_size_dscrt, CV_64F);
-
-    std::vector<std::vector<double>> obs_obj_cost{};
-
+    std::vector<std::vector<double>> obs_obj_cost{}; // for hungarian algorithm
     std::vector<cv::Mat> pre_calculated_urgency_trajpt{};
 
 
@@ -222,9 +221,9 @@ struct distribution_map
                 std::array<double, 2> dist_end{dist_bgn[0] + traj_waypt[time_delay_idx + waypt_interval][0] - traj_waypt[time_delay_idx][0], dist_bgn[1] + traj_waypt[time_delay_idx + waypt_interval][1] - traj_waypt[time_delay_idx][1]};
                 double dist_sqr = dist_bgn[0] * dist_bgn[0] + dist_bgn[1] * dist_bgn[1];
                 double urgency = 1.0 / (2.0 * M_PI * stdev_vel * stdev_vel) * std::exp(-dist_sqr / (2.0 * (stdev_vel * time_delay) * (stdev_vel * time_delay)));
-                std::array<double, 2> vel_before{dist_bgn[0] / time_delay, dist_bgn[1] / time_delay};
-                std::array<double, 2> vel_after{dist_end[0] / (time_delay + waypt_interval * step_time), dist_end[1] / (time_delay + waypt_interval * step_time)};
-                urgency *= std::sqrt((vel_after[0] - vel_before[0]) * (vel_after[0] - vel_before[0]) + (vel_after[1] - vel_before[1]) * (vel_after[1] - vel_before[1]));
+                std::array<double, 2> vel_bgn{dist_bgn[0] / time_delay, dist_bgn[1] / time_delay};
+                std::array<double, 2> vel_end{dist_end[0] / (time_delay + waypt_interval * step_time), dist_end[1] / (time_delay + waypt_interval * step_time)};
+                urgency *= std::sqrt((vel_end[0] - vel_bgn[0]) * (vel_end[0] - vel_bgn[0]) + (vel_end[1] - vel_bgn[1]) * (vel_end[1] - vel_bgn[1]));
                 urgency_trajpt->at<double>(i, j) = urgency;
             }
         }
@@ -337,15 +336,30 @@ struct distribution_map
         urgency_map_potential = urgency_map_potential.mul(map_potential);
     }
 
-    void update_urgency_map_known_obj()
+    void update_urgency_known_obj()
     {
+        urgency_known_obj.resize(0);
         for (auto itr = known_obj.begin(); itr != known_obj.end(); itr++) {
-            
+            double traj_urgency = 0.0;
+            for (size_t i = static_cast<size_t>(waypt_start_idx); i + waypt_interval < waypt_num; i += static_cast<size_t>(waypt_interval)) {
+                del_t_obj_bgn = static_cast<double>(i + 1 + itr->frame_idx) * step_time;
+                del_t_obj_end = static_cast<double>(i + 1 + waypt_interval + itr->frame_idx) * step_time;
+                std::array<double, 2> dist_bgn{traj_waypt[i][0] - (itr->posi[0] + itr->vel[0] * del_t_obj_bgn), traj_waypt[i][1] - (itr->posi[1] + itr->vel[1] * del_t_obj_bgn)};
+                std::array<double, 2> dist_end{traj_waypt[i + waypt_interval][0] - (itr->posi[0] + itr->vel[0] * del_t_obj_end), traj_waypt[i + waypt_interval][1] - (itr->posi[1] + itr->vel[1] * del_t_obj_end)};
+                double dist_sqr = dist_bgn[0] * dist_bgn[0] + dist_bgn[1] * dist_bgn[1];
+                double urgency = 1.0 / (2.0 * M_PI * stdev_acc * stdev_acc) * std::exp(-dist_sqr / (2.0 * (1.0/2.0 * stdev_acc * del_t_obj_bgn * del_t_obj_bgn) * (1.0/2.0 * stdev_acc * del_t_obj_bgn * del_t_obj_bgn)));
+                std::array<double, 2> acc_bgn{2*dist_bgn[0] / (del_t_obj_bgn * del_t_obj_bgn), 2*dist_bgn[1] / (del_t_obj_bgn * del_t_obj_bgn)};
+                std::array<double, 2> acc_end{2*dist_end[0] / (del_t_obj_end * del_t_obj_end), 2*dist_end[1] / (del_t_obj_end * del_t_obj_end)};
+                urgency *= std::sqrt((acc_end[0] - acc_bgn[0]) * (acc_end[0] - acc_bgn[0]) + (acc_end[1] - acc_bgn[1]) * (acc_end[1] - acc_bgn[1]));
+                traj_urgency += urgency;
+            }
+            urgency_known_obj.push_back(traj_urgency);
         }
     }
 
     double get_hybrid_urgency(double camera_new_orientation, std::array<double, 3> const& robot_last_position, std::array<double, 3> const& robot_new_position, double fov_angle, double fov_depth, double fov_depth_min)
     {
+        // calculate urgency potential
         std::array<int, 2> del_pos_dscrt_xy{static_cast<int>((robot_new_position[0] - robot_last_position[0]) / grid_size), static_cast<int>((robot_new_position[1] - robot_last_position[1]) / grid_size)};
         cv::Point center(map_size_hf_dscrt + del_pos_dscrt_xy[0], map_size_hf_dscrt + del_pos_dscrt_xy[1]);
         int fov_depth_dscrt = static_cast<int>(fov_depth / grid_size);
@@ -384,7 +398,26 @@ struct distribution_map
         cv::Mat masked_urgency_map_potential = urgency_map_potential.mul(mask);
         double urgency_potential = cv::sum(masked_urgency_map_potential)[0];
 
-        return urgency_potential;
+        // calculate urgency known object
+        double urgency_known_obj = 0.0;
+        int known_obj_idx = 0;
+        for (auto = known_obj.begin(); itr != known_obj.end(); itr++) {
+            double ang_coeff = 0.0;
+            std::array<double, 2> obj_rel_posi{itr->posi[0] + itr->vel[0] * step_time - robot_new_position[0], itr->posi[1] + itr->vel[1] * step_time - robot_new_position[1]};
+            if (obj_rel_posi[0]*obj_rel_posi[0] + obj_rel_posi[1]*obj_rel_posi[1] <= fov_depth*fov_depth) {
+                double obj_angle = std::atan2(obj_rel_posi[1], obj_rel_posi[0]);
+                double obj_rel_angle = theta_property(obj_rel_angle - camera_new_orientation);
+                if (std::abs(obj_rel_angle) <= fov_angle/2.0) {
+                    ang_coeff = 1.0
+                }
+                else { // std::abs(obj_rel_angle) > fov_angle/2.0
+                    ang_coeff = hybrid_urgency_grad * (M_PI - std::abs(obj_rel_angle));
+                }
+            }
+            urgency_known_obj += ang_coeff * urgency_known_obj[known_obj_idx];
+        }
+
+        return urgency_potential + urgency_known_obj;
     }
 
 
@@ -417,8 +450,10 @@ struct distribution_map
         std::chrono::high_resolution_clock::time_point t_6 = std::chrono::high_resolution_clock::now();
         update_urgency_map_potential();
         std::chrono::high_resolution_clock::time_point t_7 = std::chrono::high_resolution_clock::now();
-        get_hybrid_urgency(camera_last_orientation, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
+        update_urgency_known_obj();
         std::chrono::high_resolution_clock::time_point t_8 = std::chrono::high_resolution_clock::now();
+        get_hybrid_urgency(camera_last_orientation, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
+        std::chrono::high_resolution_clock::time_point t_9 = std::chrono::high_resolution_clock::now();
        
         std::cout << "move_map_potential: " << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
         std::cout << "scan_map_potential: " << (t_2 - t_1).count()/1e6 << "ms" << std::endl;
@@ -426,7 +461,8 @@ struct distribution_map
         std::cout << "hstr_update_known_obj: " << (t_4 - t_3).count()/1e6 << "ms" << std::endl;
         std::cout << "obs_update_known_obj: " << (t_5 - t_4).count()/1e6 << "ms" << std::endl;
         std::cout << "update_urgency_map_potential: " << (t_7 - t_6).count()/1e6 << "ms" << std::endl;
-        std::cout << "get_hybrid_urgency: " << (t_8 - t_7).count()/1e6 << "ms" << std::endl;
+        std::cout << "update_urgency_known_obj: " << (t_8 - t_7).count()/1e6 << "ms" << std::endl;
+        std::cout << "get_hybrid_urgency: " << (t_9 - t_8).count()/1e6 << "ms" << std::endl;
     }
 
 
