@@ -342,8 +342,8 @@ struct distribution_map
         for (auto itr = known_obj.begin(); itr != known_obj.end(); itr++) {
             double traj_urgency = 0.0;
             for (size_t i = static_cast<size_t>(waypt_start_idx); i + waypt_interval < waypt_num; i += static_cast<size_t>(waypt_interval)) {
-                del_t_obj_bgn = static_cast<double>(i + 1 + itr->frame_idx) * step_time;
-                del_t_obj_end = static_cast<double>(i + 1 + waypt_interval + itr->frame_idx) * step_time;
+                double del_t_obj_bgn = static_cast<double>(i + 1 + itr->frame_idx) * step_time;
+                double del_t_obj_end = static_cast<double>(i + 1 + waypt_interval + itr->frame_idx) * step_time;
                 std::array<double, 2> dist_bgn{traj_waypt[i][0] - (itr->posi[0] + itr->vel[0] * del_t_obj_bgn), traj_waypt[i][1] - (itr->posi[1] + itr->vel[1] * del_t_obj_bgn)};
                 std::array<double, 2> dist_end{traj_waypt[i + waypt_interval][0] - (itr->posi[0] + itr->vel[0] * del_t_obj_end), traj_waypt[i + waypt_interval][1] - (itr->posi[1] + itr->vel[1] * del_t_obj_end)};
                 double dist_sqr = dist_bgn[0] * dist_bgn[0] + dist_bgn[1] * dist_bgn[1];
@@ -401,7 +401,7 @@ struct distribution_map
         // calculate urgency known object
         double urgency_known_obj = 0.0;
         int known_obj_idx = 0;
-        for (auto = known_obj.begin(); itr != known_obj.end(); itr++) {
+        for (auto itr = known_obj.begin(); itr != known_obj.end(); itr++) {
             double ang_coeff = 0.0;
             std::array<double, 2> obj_rel_posi{itr->posi[0] + itr->vel[0] * step_time - robot_new_position[0], itr->posi[1] + itr->vel[1] * step_time - robot_new_position[1]};
             if (obj_rel_posi[0]*obj_rel_posi[0] + obj_rel_posi[1]*obj_rel_posi[1] <= fov_depth*fov_depth) {
