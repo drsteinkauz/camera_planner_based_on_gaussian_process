@@ -72,7 +72,7 @@ struct distribution_map
     
     cv::Mat cvlt_kern = cv::Mat::zeros(kern_size_dscrt, kern_size_dscrt, CV_64F);
     std::vector<std::vector<double>> obs_obj_cost{}; // for hungarian algorithm
-    std::vector<cv::Mat> pre_calculated_urgency_trajpt{};
+    std::vector<cv::Mat> urgency_trajpt_seeds{};
 
 
 
@@ -113,10 +113,10 @@ struct distribution_map
             double urgency_radius = 3 * stdev_vel * i * step_time;
             int urgency_radius_dscrt = static_cast<int>(urgency_radius / grid_size);
 
-            cv::Mat urgency_trajpt = cv::Mat::zeros(2*urgency_radius_dscrt+1, 2*urgency_radius_dscrt+1, CV_64F);
-            generate_urgency_trajpt_matrix(&urgency_trajpt, urgency_radius_dscrt, i);
+            cv::Mat urgency_trajpt_seed = cv::Mat::zeros(2*urgency_radius_dscrt+1, 2*urgency_radius_dscrt+1, CV_64F);
+            generate_urgency_trajpt_seeds(&urgency_trajpt_seed, urgency_radius_dscrt, i);
 
-            pre_calculated_urgency_trajpt.push_back(urgency_trajpt);
+            urgency_trajpt_seeds.push_back(urgency_trajpt_seed);
         }
     }
 
@@ -212,19 +212,30 @@ struct distribution_map
         return false;
     }
 
-    void generate_urgency_trajpt_matrix(cv::Mat *urgency_trajpt, int urgency_radius_dscrt, int time_delay_idx)
+    void generate_urgency_trajpt_seeds(cv::Mat *urgency_trajpt_seed, int urgency_radius_dscrt, int time_delay_idx)
     {
         double time_delay = static_cast<double>(time_delay_idx) * step_time;
-        for (size_t i = 0; i < urgency_trajpt->rows; i++){
-            for (size_t j = 0; j < urgency_trajpt->cols; j++){
+        for (size_t i = 0; i < urgency_trajpt_seed->rows; i++){
+            for (size_t j = 0; j < urgency_trajpt_seed->cols; j++){
                 std::array<double, 2> dist_bgn{(static_cast<double>(urgency_radius_dscrt) - static_cast<double>(i)) * grid_size, (static_cast<double>(urgency_radius_dscrt) - static_cast<double>(j)) * grid_size};
-                std::array<double, 2> dist_end{dist_bgn[0] + traj_waypt[time_delay_idx + waypt_interval][0] - traj_waypt[time_delay_idx][0], dist_bgn[1] + traj_waypt[time_delay_idx + waypt_interval][1] - traj_waypt[time_delay_idx][1]};
                 double dist_sqr = dist_bgn[0] * dist_bgn[0] + dist_bgn[1] * dist_bgn[1];
                 double urgency = 1.0 / (2.0 * M_PI * stdev_vel * stdev_vel) * std::exp(-dist_sqr / (2.0 * (stdev_vel * time_delay) * (stdev_vel * time_delay)));
+                urgency_trajpt_seed->at<double>(i, j) = urgency;
+            }
+        }
+    }
+    
+    void generate_urgency_trajpt_dvel(cv::Mat *urgency_trajpt_dvel, int urgency_radius_dscrt, int time_delay_idx)
+    {
+        double time_delay = static_cast<double>(time_delay_idx) * step_time;
+        for (size_t i = 0; i < urgency_trajpt_dvel->rows; i++){
+            for (size_t j = 0; j < urgency_trajpt_dvel->cols; j++){
+                std::array<double, 2> dist_bgn{(static_cast<double>(urgency_radius_dscrt) - static_cast<double>(i)) * grid_size, (static_cast<double>(urgency_radius_dscrt) - static_cast<double>(j)) * grid_size};
+                std::array<double, 2> dist_end{dist_bgn[0] + traj_waypt[time_delay_idx + waypt_interval][0] - traj_waypt[time_delay_idx][0], dist_bgn[1] + traj_waypt[time_delay_idx + waypt_interval][1] - traj_waypt[time_delay_idx][1]};
                 std::array<double, 2> vel_bgn{dist_bgn[0] / time_delay, dist_bgn[1] / time_delay};
                 std::array<double, 2> vel_end{dist_end[0] / (time_delay + waypt_interval * step_time), dist_end[1] / (time_delay + waypt_interval * step_time)};
-                urgency *= std::sqrt((vel_end[0] - vel_bgn[0]) * (vel_end[0] - vel_bgn[0]) + (vel_end[1] - vel_bgn[1]) * (vel_end[1] - vel_bgn[1]));
-                urgency_trajpt->at<double>(i, j) = urgency;
+                urgency = std::sqrt((vel_end[0] - vel_bgn[0]) * (vel_end[0] - vel_bgn[0]) + (vel_end[1] - vel_bgn[1]) * (vel_end[1] - vel_bgn[1]));
+                urgency_trajpt_dvel->at<double>(i, j) = urgency;
             }
         }
     }
@@ -322,7 +333,10 @@ struct distribution_map
             double urgency_radius = 3 * stdev_vel * i * step_time;
             int urgency_radius_dscrt = static_cast<int>(urgency_radius / grid_size);
 
-            cv::Mat urgency_trajpt = pre_calculated_urgency_trajpt[(i - waypt_start_idx) / waypt_interval];
+            cv::Mat urgency_trajpt = urgency_trajpt_seeds[(i - waypt_start_idx) / waypt_interval];
+            std::array<double, 2> vel_bgn{traj_waypt[i][0] / (static_cast<double>(i) * step_time), traj_waypt[i][1] / (static_cast<double>(i) * step_time)};
+            std::array<double, 2> vel_end{traj_waypt[i + waypt_interval][0] / (static_cast<double>(i + waypt_interval) * step_time), traj_waypt[i + waypt_interval][1] / (static_cast<double>(i + waypt_interval) * step_time)};
+            urgency_trajpt = urgency_trajpt * std::sqrt((vel_end[0] - vel_bgn[0]) * (vel_end[0] - vel_bgn[0]) + (vel_end[1] - vel_bgn[1]) * (vel_end[1] - vel_bgn[1]));
 
             int board_lim_left = std::min(waypt_idx[0], urgency_radius_dscrt);
             int board_lim_right = std::min(map_size_dscrt - waypt_idx[0], urgency_radius_dscrt+1);
