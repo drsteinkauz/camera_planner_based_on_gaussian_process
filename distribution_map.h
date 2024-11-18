@@ -399,7 +399,7 @@ struct distribution_map
         double urgency_potential = cv::sum(masked_urgency_map_potential)[0];
 
         // calculate urgency known object
-        double urgency_known_obj = 0.0;
+        double urgency_known_obj_total = 0.0;
         int known_obj_idx = 0;
         for (auto itr = known_obj.begin(); itr != known_obj.end(); itr++) {
             double ang_coeff = 0.0;
@@ -414,10 +414,11 @@ struct distribution_map
                     ang_coeff = hybrid_urgency_grad * (M_PI - std::abs(obj_rel_angle));
                 }
             }
-            urgency_known_obj += ang_coeff * urgency_known_obj[known_obj_idx];
+            urgency_known_obj_total += ang_coeff * urgency_known_obj[known_obj_idx];
+            known_obj_idx++;
         }
 
-        return urgency_potential + urgency_known_obj;
+        return urgency_potential + urgency_known_obj_total;
     }
 
 
