@@ -408,7 +408,7 @@ struct distribution_map
                 double obj_angle = std::atan2(obj_rel_posi[1], obj_rel_posi[0]);
                 double obj_rel_angle = theta_property(obj_rel_angle - camera_new_orientation);
                 if (std::abs(obj_rel_angle) <= fov_angle/2.0) {
-                    ang_coeff = 1.0
+                    ang_coeff = 1.0;
                 }
                 else { // std::abs(obj_rel_angle) > fov_angle/2.0
                     ang_coeff = hybrid_urgency_grad * (M_PI - std::abs(obj_rel_angle));
