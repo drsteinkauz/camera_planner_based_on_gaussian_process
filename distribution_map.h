@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/core/mat.hpp>
@@ -29,7 +30,7 @@ struct distribution_map
     static constexpr double step_time = 0.1;
 
     static constexpr double prior_prob = 0.2;
-    static constexpr double stdev_vel = 2.0;
+    static constexpr double stdev_vel = 3.0;
     static constexpr double stdev_acc = 10.0;
     
     static constexpr double grid_size = 0.1;
@@ -122,12 +123,12 @@ struct distribution_map
 
 
 
-    double theta_property(double theta)
+    double angle_property(double theta)
     {
         if (theta > M_PI)
-            return theta_property(theta - 2 * M_PI);
+            return angle_property(theta - 2 * M_PI);
         else if (theta <= -M_PI)
-            return theta_property(theta + 2 * M_PI);
+            return angle_property(theta + 2 * M_PI);
         else
             return theta;
     }
@@ -246,7 +247,7 @@ struct distribution_map
         double start_angle = 0.0;
         double end_angle = fov_angle * 180.0/M_PI;
         double bias_angle = M_PI/2.0 - camera_last_orientation - fov_angle/2.0;
-        bias_angle = theta_property(bias_angle);
+        bias_angle = angle_property(bias_angle);
         if (bias_angle < 0.0)
             bias_angle += 2 * M_PI;
         bias_angle *= 180.0/M_PI;
@@ -367,7 +368,7 @@ struct distribution_map
         double start_angle = 0.0;
         double end_angle = (2*M_PI - fov_angle) * 180.0/M_PI;
         double bias_angle = M_PI/2.0 - (camera_new_orientation - M_PI) - (2*M_PI - fov_angle)/2.0;
-        bias_angle = theta_property(bias_angle);
+        bias_angle = angle_property(bias_angle);
         if (bias_angle < 0.0)
             bias_angle += 2 * M_PI;
         bias_angle *= 180.0/M_PI;
@@ -377,8 +378,8 @@ struct distribution_map
         for (size_t i = 0; i < mask.rows; i++) {
             for (size_t j = 0; j < mask.cols; j++) {
                 if (mask.at<double>(i, j) > 0) {
-                    double pt_angle = std::atan2(static_cast<double>(j - map_size_hf_dscrt - del_pos_dscrt_xy[1]), static_cast<double>(i - map_size_hf_dscrt - del_pos_dscrt_xy[0]));
-                    double pt_rel_angle = theta_property(pt_angle - camera_new_orientation);
+                    double pt_angle = std::atan2(static_cast<int>(j) - map_size_hf_dscrt - del_pos_dscrt_xy[1], static_cast<int>(i) - map_size_hf_dscrt - del_pos_dscrt_xy[0]);
+                    double pt_rel_angle = angle_property(pt_angle - camera_new_orientation);
                     mask.at<double>(i, j) = hybrid_urgency_grad * (M_PI - std::abs(pt_rel_angle));
                 }
             }
@@ -387,7 +388,7 @@ struct distribution_map
         start_angle = 0.0;
         end_angle = fov_angle * 180.0/M_PI;
         bias_angle = M_PI/2.0 - camera_new_orientation - fov_angle/2.0;
-        bias_angle = theta_property(bias_angle);
+        bias_angle = angle_property(bias_angle);
         if (bias_angle < 0.0)
             bias_angle += 2 * M_PI;
         bias_angle *= 180.0/M_PI;
@@ -406,7 +407,7 @@ struct distribution_map
             std::array<double, 2> obj_rel_posi{itr->posi[0] + itr->vel[0] * step_time - robot_new_position[0], itr->posi[1] + itr->vel[1] * step_time - robot_new_position[1]};
             if (obj_rel_posi[0]*obj_rel_posi[0] + obj_rel_posi[1]*obj_rel_posi[1] <= fov_depth*fov_depth) {
                 double obj_angle = std::atan2(obj_rel_posi[1], obj_rel_posi[0]);
-                double obj_rel_angle = theta_property(obj_rel_angle - camera_new_orientation);
+                double obj_rel_angle = angle_property(obj_rel_angle - camera_new_orientation);
                 if (std::abs(obj_rel_angle) <= fov_angle/2.0) {
                     ang_coeff = 1.0;
                 }
@@ -456,14 +457,41 @@ struct distribution_map
         get_hybrid_urgency(camera_last_orientation, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
         std::chrono::high_resolution_clock::time_point t_9 = std::chrono::high_resolution_clock::now();
        
-        std::cout << "move_map_potential: " << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
-        std::cout << "scan_map_potential: " << (t_2 - t_1).count()/1e6 << "ms" << std::endl;
-        std::cout << "convolute_map_potential: " << (t_3 - t_2).count()/1e6 << "ms" << std::endl;
-        std::cout << "hstr_update_known_obj: " << (t_4 - t_3).count()/1e6 << "ms" << std::endl;
-        std::cout << "obs_update_known_obj: " << (t_5 - t_4).count()/1e6 << "ms" << std::endl;
-        std::cout << "update_urgency_map_potential: " << (t_7 - t_6).count()/1e6 << "ms" << std::endl;
-        std::cout << "update_urgency_known_obj: " << (t_8 - t_7).count()/1e6 << "ms" << std::endl;
-        std::cout << "get_hybrid_urgency: " << (t_9 - t_8).count()/1e6 << "ms" << std::endl;
+        // std::cout << "move_map_potential: " << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
+        // std::cout << "scan_map_potential: " << (t_2 - t_1).count()/1e6 << "ms" << std::endl;
+        // std::cout << "convolute_map_potential: " << (t_3 - t_2).count()/1e6 << "ms" << std::endl;
+        // std::cout << "hstr_update_known_obj: " << (t_4 - t_3).count()/1e6 << "ms" << std::endl;
+        // std::cout << "obs_update_known_obj: " << (t_5 - t_4).count()/1e6 << "ms" << std::endl;
+        // std::cout << "update_urgency_map_potential: " << (t_7 - t_6).count()/1e6 << "ms" << std::endl;
+        // std::cout << "update_urgency_known_obj: " << (t_8 - t_7).count()/1e6 << "ms" << std::endl;
+        // std::cout << "get_hybrid_urgency: " << (t_9 - t_8).count()/1e6 << "ms" << std::endl;
+    }
+
+
+
+    double choose_new_camera_orientation()
+    {
+        double old_camera_orientation = camera_crt_orientation;
+        double del_angle = 10.0 * M_PI / 180.0;
+        double vel_angle = 40.0 * M_PI / 180.0;
+        double step_angle = vel_angle * step_time;
+
+        double left_angle = angle_property(old_camera_orientation + del_angle);
+        double right_angle = angle_property(old_camera_orientation - del_angle);
+        double hybrid_urgency_mid = get_hybrid_urgency(old_camera_orientation, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
+        double hybrid_urgency_left = get_hybrid_urgency(left_angle, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
+        double hybrid_urgency_right = get_hybrid_urgency(right_angle, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
+        // std::cout << hybrid_urgency_left << " " << hybrid_urgency_mid << " " << hybrid_urgency_right << std::endl;
+
+        if (hybrid_urgency_mid >= hybrid_urgency_left && hybrid_urgency_mid >= hybrid_urgency_right) {
+            return old_camera_orientation;
+        }
+        else if (hybrid_urgency_left >= hybrid_urgency_mid && hybrid_urgency_left >= hybrid_urgency_right) {
+            return old_camera_orientation + step_angle;
+        }
+        else { // hybrid_urgency_right >= hybrid_urgency_mid && hybrid_urgency_right >= hybrid_urgency_left
+            return old_camera_orientation - step_angle;
+        }
     }
 
 
@@ -478,11 +506,13 @@ struct distribution_map
                 map_potential_img.at<uchar>(i, j) = static_cast<uchar>(map_potential.at<double>(i, j) * 255);
             }
         }
+        cv::rotate(map_potential_img, map_potential_img, cv::ROTATE_90_COUNTERCLOCKWISE);
         cv::normalize(urgency_map_potential, urgency_map_potential_img, 0, 255, cv::NORM_MINMAX);
         urgency_map_potential_img.convertTo(urgency_map_potential_img, CV_8UC1);
+        cv::rotate(urgency_map_potential_img, urgency_map_potential_img, cv::ROTATE_90_COUNTERCLOCKWISE);
         cv::imshow("map_potential", map_potential_img);
         cv::imshow("urgency_map_potential", urgency_map_potential_img);
-        cv::waitKey(0);
+        cv::waitKey(100);
     }
     //*/
     
