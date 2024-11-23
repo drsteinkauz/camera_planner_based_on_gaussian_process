@@ -24,12 +24,14 @@ int main() {
             map.traj_waypt[j] = whole_traj[i+j];
         }
         
-        // std::chrono::high_resolution_clock::time_point t_0 = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point t_0 = std::chrono::high_resolution_clock::now();
         map.update_map();
-        // std::chrono::high_resolution_clock::time_point t_1 = std::chrono::high_resolution_clock::now();
-        // std::cout << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
-
+        std::chrono::high_resolution_clock::time_point t_1 = std::chrono::high_resolution_clock::now();
         actual_camera_orientation = map.choose_new_camera_orientation();
+        std::chrono::high_resolution_clock::time_point t_2 = std::chrono::high_resolution_clock::now();
+
+        std::cout << "update_map: " << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
+        std::cout << "choose_new_camera_orientation: " << (t_2 - t_1).count()/1e6 << "ms" << std::endl;
         
         map.draw_map();
     }

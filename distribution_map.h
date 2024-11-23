@@ -454,8 +454,7 @@ struct distribution_map
         std::chrono::high_resolution_clock::time_point t_7 = std::chrono::high_resolution_clock::now();
         update_urgency_known_obj();
         std::chrono::high_resolution_clock::time_point t_8 = std::chrono::high_resolution_clock::now();
-        get_hybrid_urgency(camera_last_orientation, robot_last_position, traj_waypt[0], fov_angle, fov_depth, fov_depth_min);
-        std::chrono::high_resolution_clock::time_point t_9 = std::chrono::high_resolution_clock::now();
+
        
         // std::cout << "move_map_potential: " << (t_1 - t_0).count()/1e6 << "ms" << std::endl;
         // std::cout << "scan_map_potential: " << (t_2 - t_1).count()/1e6 << "ms" << std::endl;
@@ -464,7 +463,6 @@ struct distribution_map
         // std::cout << "obs_update_known_obj: " << (t_5 - t_4).count()/1e6 << "ms" << std::endl;
         // std::cout << "update_urgency_map_potential: " << (t_7 - t_6).count()/1e6 << "ms" << std::endl;
         // std::cout << "update_urgency_known_obj: " << (t_8 - t_7).count()/1e6 << "ms" << std::endl;
-        // std::cout << "get_hybrid_urgency: " << (t_9 - t_8).count()/1e6 << "ms" << std::endl;
     }
 
 
