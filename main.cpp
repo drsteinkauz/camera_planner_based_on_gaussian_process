@@ -11,10 +11,14 @@ int main() {
     const int step_num = 200;
     const int traj_num = 30;
     std::array<std::array<double, 3>,step_num + traj_num> whole_traj{};
-    double speed = 1.0;
-    for (size_t i = 0; i < step_num + traj_num; i++) {
-        whole_traj[i] = {static_cast<double>(i) * speed*map.step_time, static_cast<double>(i) * speed*map.step_time, 0.0};
+    double speed = 3.0;
+    for (size_t i = 0; i < step_num/2; i++) {
+        whole_traj[i] = {static_cast<double>(i) * speed*map.step_time, static_cast<double>(i) * speed*map.step_time /2.0, 0.0};
     }
+    for (size_t i = 0; i < step_num/2 + traj_num; i++) {
+        whole_traj[step_num/2 + i] = {static_cast<double>(step_num/2 + static_cast<int>(i)) * speed*map.step_time, static_cast<double>(step_num/2 - static_cast<int>(i)) * speed*map.step_time /2.0, 0.0};
+    }
+
     double actual_camera_orientation{};
 
     for (size_t i = 0; i < step_num; i++) {

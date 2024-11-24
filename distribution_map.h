@@ -236,7 +236,7 @@ struct distribution_map
     {
         cv::Mat map_potential_alt{map_potential};
         std::array<int, 2> del_pos_dscrt_xy {static_cast<int>(robot_del_position[0]/grid_size), static_cast<int>(robot_del_position[1]/grid_size)};
-        cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1.0, 0.0, del_pos_dscrt_xy[0], 0.0, 1.0, del_pos_dscrt_xy[1]);
+        cv::Mat trans_mat = (cv::Mat_<double>(2, 3) << 1.0, 0.0, -del_pos_dscrt_xy[1], 0.0, 1.0, -del_pos_dscrt_xy[0]);
         cv::warpAffine(map_potential_alt, map_potential, trans_mat, map_potential_alt.size(), cv::INTER_LINEAR, cv::BORDER_CONSTANT, cv::Scalar(prior_prob));
     }
 
@@ -275,7 +275,7 @@ struct distribution_map
     void convolute_map_potential()
     {
         cv::Mat map_potential_alt{map_potential};
-        cv::filter2D(map_potential_alt, map_potential, -1, cvlt_kern, cv::Point(-1, -1), 0, cv::BORDER_REPLICATE);
+        cv::filter2D(map_potential_alt, map_potential, -1, cvlt_kern, cv::Point(kern_size_hf_dscrt+2, kern_size_hf_dscrt+2), 0, cv::BORDER_REPLICATE);
     }
 
     void hstr_update_known_obj()
@@ -330,8 +330,8 @@ struct distribution_map
             int board_lim_down = std::min(waypt_idx[1], urgency_radius_dscrt);
             int board_lim_up = std::min(map_size_dscrt - waypt_idx[1], urgency_radius_dscrt+1);
             
-            cv::Mat sub_urgency_trajpt = urgency_trajpt(cv::Rect(urgency_radius_dscrt - board_lim_left, urgency_radius_dscrt - board_lim_down, board_lim_right + board_lim_left, board_lim_up + board_lim_down));
-            urgency_map_potential(cv::Rect(waypt_idx[0] - board_lim_left, waypt_idx[1] - board_lim_down, board_lim_right + board_lim_left, board_lim_up + board_lim_down)) += sub_urgency_trajpt;
+            cv::Mat sub_urgency_trajpt = urgency_trajpt(cv::Rect(urgency_radius_dscrt - board_lim_down, urgency_radius_dscrt - board_lim_left, board_lim_up + board_lim_down, board_lim_right + board_lim_left));
+            urgency_map_potential(cv::Rect(waypt_idx[1] - board_lim_down, waypt_idx[0] - board_lim_left, board_lim_up + board_lim_down, board_lim_right + board_lim_left)) += sub_urgency_trajpt;
         }
 
         urgency_map_potential = urgency_map_potential.mul(map_potential);
