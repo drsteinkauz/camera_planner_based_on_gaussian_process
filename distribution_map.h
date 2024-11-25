@@ -102,7 +102,7 @@ struct distribution_map
                 double dist_sqr = std::pow((i - kern_size_hf_dscrt)*grid_size, 2) + std::pow((j - kern_size_hf_dscrt)*grid_size, 2);
                 cvlt_kern.at<double>(i, j) = 1.0 / (2.0 * M_PI * std::pow(stdev_pos, 2)) * std::exp(-dist_sqr / (2.0 * std::pow(stdev_pos, 2))); // probalistic density
                 //*/
-                double dist_sqr = (i - kern_size_hf_dscrt)*grid_size * (i - kern_size_hf_dscrt)*grid_size + (j - kern_size_hf_dscrt)*grid_size * (j - kern_size_hf_dscrt)*grid_size;
+                double dist_sqr = static_cast<double>(static_cast<int>(i) - kern_size_hf_dscrt)*grid_size * static_cast<double>(static_cast<int>(i) - kern_size_hf_dscrt)*grid_size + static_cast<double>(static_cast<int>(j) - kern_size_hf_dscrt)*grid_size * static_cast<double>(static_cast<int>(j) - kern_size_hf_dscrt)*grid_size;
                 cvlt_kern.at<double>(i, j) = std::exp(-dist_sqr / (2.0 * stdev_pos * stdev_pos));
                 sum_kern += cvlt_kern.at<double>(i, j);
             }
@@ -275,7 +275,7 @@ struct distribution_map
     void convolute_map_potential()
     {
         cv::Mat map_potential_alt{map_potential};
-        cv::filter2D(map_potential_alt, map_potential, -1, cvlt_kern, cv::Point(kern_size_hf_dscrt+2, kern_size_hf_dscrt+2), 0, cv::BORDER_REPLICATE);
+        cv::filter2D(map_potential_alt, map_potential, -1, cvlt_kern, cv::Point(-1, -1), 0, cv::BORDER_REPLICATE);
     }
 
     void hstr_update_known_obj()
@@ -323,7 +323,7 @@ struct distribution_map
             double urgency_radius = 3 * stdev_vel * i * step_time;
             int urgency_radius_dscrt = static_cast<int>(urgency_radius / grid_size);
 
-            cv::Mat urgency_trajpt = pre_calculated_urgency_trajpt[(i - waypt_start_idx) / waypt_interval];
+            cv::Mat urgency_trajpt = pre_calculated_urgency_trajpt[(i - static_cast<size_t>(waypt_start_idx)) / waypt_interval];
 
             int board_lim_left = std::min(waypt_idx[0], urgency_radius_dscrt);
             int board_lim_right = std::min(map_size_dscrt - waypt_idx[0], urgency_radius_dscrt+1);
@@ -343,8 +343,8 @@ struct distribution_map
         for (auto itr = known_obj.begin(); itr != known_obj.end(); itr++) {
             double traj_urgency = 0.0;
             for (size_t i = static_cast<size_t>(waypt_start_idx); i + waypt_interval < waypt_num; i += static_cast<size_t>(waypt_interval)) {
-                double del_t_obj_bgn = static_cast<double>(i + 1 + itr->frame_idx) * step_time;
-                double del_t_obj_end = static_cast<double>(i + 1 + waypt_interval + itr->frame_idx) * step_time;
+                double del_t_obj_bgn = static_cast<double>(i + static_cast<size_t>(1 + itr->frame_idx)) * step_time;
+                double del_t_obj_end = static_cast<double>(i + static_cast<size_t>(1 + waypt_interval + itr->frame_idx)) * step_time;
                 std::array<double, 2> dist_bgn{traj_waypt[i][0] - (itr->posi[0] + itr->vel[0] * del_t_obj_bgn), traj_waypt[i][1] - (itr->posi[1] + itr->vel[1] * del_t_obj_bgn)};
                 std::array<double, 2> dist_end{traj_waypt[i + waypt_interval][0] - (itr->posi[0] + itr->vel[0] * del_t_obj_end), traj_waypt[i + waypt_interval][1] - (itr->posi[1] + itr->vel[1] * del_t_obj_end)};
                 double dist_sqr = dist_bgn[0] * dist_bgn[0] + dist_bgn[1] * dist_bgn[1];
