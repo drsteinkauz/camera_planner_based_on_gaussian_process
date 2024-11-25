@@ -407,7 +407,7 @@ struct distribution_map
             std::array<double, 2> obj_rel_posi{itr->posi[0] + itr->vel[0] * step_time - robot_new_position[0], itr->posi[1] + itr->vel[1] * step_time - robot_new_position[1]};
             if (obj_rel_posi[0]*obj_rel_posi[0] + obj_rel_posi[1]*obj_rel_posi[1] <= fov_depth*fov_depth) {
                 double obj_angle = std::atan2(obj_rel_posi[1], obj_rel_posi[0]);
-                double obj_rel_angle = angle_property(obj_rel_angle - camera_new_orientation);
+                double obj_rel_angle = angle_property(obj_angle - camera_new_orientation);
                 if (std::abs(obj_rel_angle) <= fov_angle/2.0) {
                     ang_coeff = 1.0;
                 }
@@ -471,7 +471,7 @@ struct distribution_map
     {
         double old_camera_orientation = camera_crt_orientation;
         double del_angle = 10.0 * M_PI / 180.0;
-        double vel_angle = 40.0 * M_PI / 180.0;
+        double vel_angle = 80.0 * M_PI / 180.0;
         double step_angle = vel_angle * step_time;
 
         double left_angle = angle_property(old_camera_orientation + del_angle);
