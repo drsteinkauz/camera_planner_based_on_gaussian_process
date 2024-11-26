@@ -256,12 +256,12 @@ struct distribution_map
         cv::ellipse(mask, center, cv::Size(fov_depth_dscrt, fov_depth_dscrt), bias_angle, start_angle, end_angle, cv::Scalar(1), -1);
         
         std::array<int, 2> cmr_pt_idx{map_size_hf_dscrt, map_size_hf_dscrt};
+        std::array<double, 2> cmr_posi{robot_last_position[0], robot_last_position[1]};
         for (size_t i = 0; i < mask.rows; i++){
             for (size_t j = 0; j < mask.cols; j++){
                 if (mask.at<uchar>(i, j) == 1){
                     std::array<int, 2> obs_pt_idx{static_cast<int>(i), static_cast<int>(j)};
                     std::array<double, 2> obs_posi{static_cast<double>(i - map_size_hf_dscrt)*grid_size + robot_last_position[0], static_cast<double>(j - map_size_hf_dscrt)*grid_size + robot_last_position[1]};
-                    std::array<double, 2> cmr_posi{robot_last_position[0], robot_last_position[1]};
                     if (is_blocked_grid(last_obs_stat_obj, obs_pt_idx, cmr_pt_idx) || is_blocked_dynobj(last_obs_dyn_obj, obs_posi, cmr_posi)) {
                         mask.at<uchar>(i, j) = 0;
                     }
@@ -358,7 +358,7 @@ struct distribution_map
         }
     }
 
-    double get_hybrid_urgency(double camera_new_orientation, std::array<double, 3> const& robot_last_position, std::array<double, 3> const& robot_new_position, double fov_angle, double fov_depth, double fov_depth_min)
+    double get_hybrid_urgency(double camera_new_orientation, std::array<double, 3> const& robot_last_position, std::array<double, 3> const& robot_new_position, double fov_angle, double fov_depth, double fov_depth_min, cv::Mat const& last_obs_stat_obj, std::vector<dyn_obj> const& known_obj)
     {
         // calculate urgency potential
         std::array<int, 2> del_pos_dscrt_xy{static_cast<int>((robot_new_position[0] - robot_last_position[0]) / grid_size), static_cast<int>((robot_new_position[1] - robot_last_position[1]) / grid_size)};
@@ -395,6 +395,20 @@ struct distribution_map
         cv::ellipse(mask, center, cv::Size(fov_depth_dscrt, fov_depth_dscrt), bias_angle, start_angle, end_angle, cv::Scalar(1), -1);
 
         cv::circle(mask, center, fov_depth_min_dscrt, cv::Scalar(0), -1);
+
+        std::array<int, 2> cmr_pt_idx{map_size_hf_dscrt + del_pos_dscrt_xy[0], map_size_hf_dscrt + del_pos_dscrt_xy[1]};
+        std::array<double, 2> cmr_posi{robot_new_position[0], robot_new_position[1]};
+        for (size_t i = 0; i < mask.rows; i++){
+            for (size_t j = 0; j < mask.cols; j++){
+                if (mask.at<double>(i, j) == 1){
+                    std::array<int, 2> obs_pt_idx{static_cast<int>(i), static_cast<int>(j)};
+                    std::array<double, 2> obs_posi{static_cast<double>(i - map_size_hf_dscrt)*grid_size + robot_last_position[0], static_cast<double>(j - map_size_hf_dscrt)*grid_size + robot_last_position[1]};
+                    if (is_blocked_grid(last_obs_stat_obj, obs_pt_idx, cmr_pt_idx) || is_blocked_dynobj(known_obj, obs_posi, cmr_posi)) {
+                        mask.at<double>(i, j) = 0;
+                    }
+                }
+            }
+        }
 
         cv::Mat masked_urgency_map_potential = urgency_map_potential.mul(mask);
         double urgency_potential = cv::sum(masked_urgency_map_potential)[0];
