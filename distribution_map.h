@@ -252,9 +252,9 @@ struct distribution_map
             bias_angle += 2 * M_PI;
         bias_angle *= 180.0/M_PI;
         
-        cv::Mat mask = cv::Mat::ones(map_size_dscrt, map_size_dscrt, CV_64F); // CV_8UC1 is inconvinient for calculation, but it is more efficient than CV_64F
-        cv::ellipse(mask, center, cv::Size(fov_depth_dscrt, fov_depth_dscrt), bias_angle, start_angle, end_angle, cv::Scalar(0), -1);
-
+        cv::Mat mask = cv::Mat::zeros(map_size_dscrt, map_size_dscrt, CV_8UC1);
+        cv::ellipse(mask, center, cv::Size(fov_depth_dscrt, fov_depth_dscrt), bias_angle, start_angle, end_angle, cv::Scalar(1), -1);
+        
         std::array<int, 2> cmr_pt_idx{map_size_hf_dscrt, map_size_hf_dscrt};
         for (size_t i = 0; i < mask.rows; i++){
             for (size_t j = 0; j < mask.cols; j++){
@@ -269,7 +269,7 @@ struct distribution_map
             }
         }
 
-        map_potential = map_potential.mul(mask);
+        map_potential.setTo(0, mask);
     }
 
     void convolute_map_potential()
